@@ -11,22 +11,21 @@
 #include "opencv2/highgui.hpp"
 
 #include <ctype.h>
-#include "build\Tracking.h"
 
 using namespace cv;
 using namespace std;
 using namespace xfeatures2d;
 
-int main() {
+#pragma once
+class Tracking
+{
+public:
+	Tracking();
+	~Tracking();
 
-	//string videoName = "../../../videos/Videos RSV Irisa/MVI_1111_trim_pie.mov";
-	string videoName = "../../../videos/Videos RSV Irisa/MVI_1189_trim_cormorant.mov";
-	Tracking track;
+	void savePic(Mat * im, int i);
+	void getHistogram(Mat &roi, Mat &hist, const int channels[], const int histSize[], float range[], bool usemask = false);
+	void meanShiftAlgo(string videoName, int x, int y, int width, int height);
+	void blobDetection(string videoName);
+};
 
-	//track.meanShiftAlgo(videoName, 325, 830, 100, 100);
-	track.meanShiftAlgo(videoName, 1600, 415, 80, 80);
-
-	//track.blobDetection(videoName);
-	
-	return 0;
-}
