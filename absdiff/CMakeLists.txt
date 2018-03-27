@@ -1,8 +1,0 @@
-cmake_minimum_required(VERSION 2.8)
-project( extract )
-find_package( OpenCV REQUIRED )
-include_directories( ${OpenCV_INCLUDE_DIRS} )
-add_executable( main main.cpp )
-add_executable( motion motion.cpp )
-target_link_libraries( main ${OpenCV_LIBS} )
-target_link_libraries( motion ${OpenCV_LIBS} )
