@@ -1,0 +1,2 @@
+g++ -g -Wall -Wreorder -o output main.cpp `pkg-config opencv --cflags --libs `
+Makefile:10 : la recette pour la cible « output » a échouée
