@@ -19,13 +19,21 @@ using namespace xfeatures2d;
 #pragma once
 class Tracking
 {
+private:
+	VideoCapture cap;
+	Mat roi_hist;
+	Rect track_window;
+
 public:
-	Tracking();
+	Tracking(string videoName);
 	~Tracking();
 
-	void savePic(Mat * im, int i);
-	void getHistogram(Mat &roi, Mat &hist, const int channels[], const int histSize[], float range[], bool usemask = false);
-	void meanShiftAlgo(string videoName, int x, int y, int width, int height);
+	void savePic(Mat * im, int i); 
+
+	void initializeHistogram(int x, int y, int width, int height, const int channels[], const int histSize[], float range[], const float *ranges[]);
+	void calculHistogram(Mat &roi, const int channels[], const int histSize[], float range[], const float *ranges[], bool usemask = false);
+	Point trackingCamShift(const int channels[], const int histSize[], float range[], const float *ranges[]);
+	void trackingMeanShift(int x, int y, int width, int height);
 	void blobDetection(string videoName);
 };
 

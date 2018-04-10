@@ -21,10 +21,37 @@ int main() {
 
 	//string videoName = "../../../videos/Videos RSV Irisa/MVI_1111_trim_pie.mov";
 	string videoName = "../../../videos/Videos RSV Irisa/MVI_1189_trim_cormorant.mov";
-	Tracking track;
+	Tracking track(videoName);
+	int x = 1600, y = 415, width = 80, height = 80;
+	int k = 0;
 
-	//track.meanShiftAlgo(videoName, 325, 830, 100, 100);
-	track.meanShiftAlgo(videoName, 1600, 415, 80, 80);
+	ofstream myfile("coordonnees.txt");
+	if (myfile.is_open())
+	{
+		const int channels[] = { 0, 1 };
+		const int histSize[] = { 64, 64 };
+		float range[] = { 0, 256 };
+		const float *ranges[] = { range, range };
+
+		track.initializeHistogram(x, y, width, height, channels, histSize, range, ranges);
+
+		while (true)
+		{
+			//track.meanShiftAlgo(videoName, 325, 830, 100, 100, true);
+			Point center_of_rect = track.trackingCamShift(channels, histSize, range, ranges);
+
+			// Enregistrement des centres de chaque rectangle
+			myfile << "[" << center_of_rect.x << ";" << center_of_rect.y << "]" << "\n";
+
+			k = waitKey(60);
+			if (k == 27)
+				break;
+
+		}
+
+		myfile.close();
+	}
+	else cout << "Unable to open file";
 
 	//track.blobDetection(videoName);
 	
