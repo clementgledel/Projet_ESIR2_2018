@@ -22,6 +22,8 @@ private:
 
   Mat m_result;
 
+  vector<Point2f> m_points;
+
   Mat motion(Mat & pic1,Mat & pic2){
     Mat picresult;
     Mat diffImage;
@@ -95,11 +97,12 @@ private:
     } // compute the centers of mass of each contour in the image
 
     m_result = foregroundMask;
+    m_points = mc;
   }
 public:
 
   GeoCentre():
-  m_previous(),m_picture(),m_next(),m_motion1(),m_motion2(),m_result()
+  m_previous(),m_picture(),m_next(),m_motion1(),m_motion2(),m_result(),m_points()
   {
   }
 
@@ -127,4 +130,8 @@ public:
   }
 
   Mat * getResult(){return &m_result;}
+
+  vector<Point2f> getCoords(){
+    return m_points;
+  }
 };
