@@ -112,7 +112,7 @@ public:
     }else{
       m_motion1 = motion(m_picture,m_previous);
       m_motion2 = motion(m_next,m_picture);
-
+      
       mean();
 
       resize(m_result,m_result,Size(800,400));

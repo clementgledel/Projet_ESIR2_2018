@@ -8,11 +8,14 @@
 #include "CalibInit.h"
 #include "MainWindow.h"
 #include "GeoCentre.h"
+#include <opencv2/core.hpp>
+#include <opencv2/plot.hpp>
 
 using namespace std;
 using namespace cv;
 using namespace xfeatures2d;
 using namespace sfm;
+using namespace plot;
 
 // save a picture, the name of the picture is its frame position in the video
 void savePic(Mat * im, int i){
@@ -80,7 +83,7 @@ int main(){
   return 0;
 }
 */
-
+/*
 int main(int argc, char const *argv[]) {
   //Image 20 cm
   Mat im = imread("../I3_20.jpg");
@@ -106,10 +109,24 @@ int main(int argc, char const *argv[]) {
   cout<<calib.getR()<<endl;
   return 0;
 }
-/*
+*/
+
 int main(){
+  MainWindow m_window;
   GeoCentre geo;
-  Mat * res;
+  int t(0);
+  Mat temps;
+  temps.create(1, 100, CV_64F);
+  Mat axis_X;
+  axis_X.create(1, 100, CV_64F);
+  Mat axis_Y;
+  axis_Y.create(1, 100, CV_64F);
+  for(int i(0);i<100;i++){
+    axis_X.at<double>(i) = 0;
+    axis_Y.at<double>(i) = 0;
+    temps.at<double>(i) = 0;
+  }
+  vector<Point2f> coords;
   string videoName;
 //  std::cin >> videoName;
   videoName = "../../MVI_1189_trim_cormorant.mov";
@@ -131,12 +148,29 @@ int main(){
     if (frame.empty())
       break;
     geo.setPictures(frame);
+
     geo.DO();
-    res = geo.getResult();
-    if(!res->empty()){
-      namedWindow("Output");
-      imshow("Output", *res);
+    coords = geo.getCoords();
+    //cout<<coords<<endl;
+    if(!coords.empty()){
+      axis_X.at<double>(t%100) = coords[0].x;
+      axis_Y.at<double>(t%100) = coords[0].y;
+      temps.at<double>(t%100) = t;
+      t++;
     }
+    if(!axis_X.empty()){
+      if(t%10==0){
+
+      Ptr<Plot2d> plot =Plot2d::create(temps, axis_X);
+      m_window.setXGraph(plot);
+
+      plot =Plot2d::create(temps, axis_Y);
+      m_window.setYGraph(plot);
+      }
+    m_window.setVideo(frame);
+    m_window.refresh();
+    }
+
   //namedWindow("Output");
   //imshow("Output", outputImage);
 
@@ -154,4 +188,4 @@ int main(){
   destroyAllWindows();
 
   return 0;
-}*/
+}

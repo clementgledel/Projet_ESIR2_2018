@@ -1,7 +1,10 @@
 #include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/plot.hpp>
 
 using namespace std;
 using namespace cv;
+using namespace plot;
 
 class MainWindow{
 
@@ -11,6 +14,8 @@ private:
   Mat m_XGraph;
   Mat m_YGraph;
   Mat m_mainPicture;
+
+
 
   // Stick pictures together
   void stick(){
@@ -47,8 +52,11 @@ public:
   void refresh(){
     stick();
     imshow("Test",m_mainPicture);
+
   }
 
   // Setters
-  void setVideo(Mat video){m_video = video;}
+  void setVideo(Mat & video){m_video = video;}
+  void setXGraph(Ptr<Plot2d> plot){plot->render(m_XGraph);}
+  void setYGraph(Ptr<Plot2d> plot){plot->render(m_YGraph);}
 };
