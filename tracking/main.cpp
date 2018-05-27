@@ -14,7 +14,7 @@
 #include "build\Tracking.h"
 //#include "build\CalibInit.h"
 //#include "build\CalibParam.h"
-#include "build\MainWindow.h"
+//#include "build\MainWindow.h"
 
 using namespace cv;
 using namespace std;
