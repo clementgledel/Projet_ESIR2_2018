@@ -14,7 +14,7 @@
 #include "build\Tracking.h"
 //#include "build\CalibInit.h"
 //#include "build\CalibParam.h"
-//#include "build\MainWindow.h"
+#include "build\MainWindow.h"
 
 using namespace cv;
 using namespace std;
@@ -25,7 +25,7 @@ int main() {
 	//string videoName = "../../../videos/Videos RSV Irisa/MVI_1111_trim_pie.mov";
 	string videoName = "../../../videos/Videos RSV Irisa/MVI_1189_trim_cormorant.mov";
 	Tracking track(videoName);
-	int x = 1600, y = 415, width = 80, height = 80;
+	int width = 60, height = 60;
 	int k = 0;
 
 	ofstream myfile("coordonnees.txt");
@@ -36,12 +36,12 @@ int main() {
 		float range[] = { 0, 256 };
 		const float *ranges[] = { range, range };
 
-		track.initializeHistogram(x, y, width, height, channels, histSize, range, ranges);
+		track.initializeHistogram(width, height, channels, histSize, range, ranges);
 
 		while (true)
 		{
-			//Point center_of_rect = track.meanShiftTracking(channels, histSize, range, ranges);
-			Point center_of_rect = track.camShiftTracking(channels, histSize, range, ranges);
+			Point center_of_rect = track.meanShiftTracking(channels, histSize, range, ranges);
+			//Point center_of_rect = track.camShiftTracking(channels, histSize, range, ranges);
 
 			// Enregistrement des centres de chaque rectangle
 			myfile << "[" << center_of_rect.x << ";" << center_of_rect.y << "]" << "\n";

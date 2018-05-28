@@ -22,13 +22,25 @@ class Tracking
 {
 private:
 	VideoCapture m_cap;
+	Mat m_current_frame;
 	Mat m_roi_hist;
 	Rect m_track_window;
 
-	GeoCentre * m_geo;
+	GeoCentre m_geo;
 
 	std::deque<Point> m_li_center;
 	std::deque<Point> m_li_center_afterlost;
+
+	int cpt_reinit_histo;
+
+	KalmanFilter KF;
+	Mat_<float> measurement;
+	Point KFPredictCenter;
+	Point KFCorrectCenter;
+	Point m_center_of_rect;
+	Point lastCenter;
+
+	bool isLost;
 
 public:
 	Tracking(string videoName);
@@ -36,11 +48,16 @@ public:
 
 	void savePic(Mat * im, int i); 
 
-	void initializeHistogram(int x, int y, int width, int height, const int channels[], const int histSize[], float range[], const float *ranges[]);
+	Point2f searchTarget();
+	void initializeHistogram(int width, int height, const int channels[], const int histSize[], float range[], const float *ranges[]);
 	void calculHistogram(Mat &roi, const int channels[], const int histSize[], float range[], const float *ranges[], bool usemask = false);
 	Point camShiftTracking(const int channels[], const int histSize[], float range[], const float *ranges[]);
 	Point meanShiftTracking(const int channels[], const int histSize[], float range[], const float *ranges[]);
-	void blobDetection(string videoName);
 	void traceRoute(Mat& frame, bool foundTarget);
+
+
+	void initKalman(double interval);
+	Point getCurrentState() const;
+	void setCurrentTrackWindow();
 };
 

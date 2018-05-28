@@ -4,18 +4,19 @@ Tracking::Tracking(string videoName)
 {
 	// Create a VideoCapture object and open the input file
 	// If the input is the web camera, pass 0 instead of the video file name
-	m_geo = new GeoCentre();
 	m_cap = VideoCapture(videoName);
+	m_cap >> m_current_frame;
 
 	Mat frame;
 	// Condition video 2
-	if (videoName.find("MVI_1189_trim_cormorant.mov") != -1)
+	/*if (videoName.find("MVI_1189_trim_cormorant.mov") != -1)
 	{
 		for (int i = 0; i < 45; i++)
 		{
 			m_cap >> frame;
 		}
-	}
+	}*/
+	cpt_reinit_histo = 0;
 }
 
 Tracking::~Tracking()
@@ -41,9 +42,10 @@ void Tracking::calculHistogram(Mat &roi, const int channels[], const int histSiz
 		cvtColor(roi, hsv_roi, COLOR_BGR2HSV);
 		//imwrite("hsv_roi.jpg", hsv_roi);
 		Mat maskroi;
-		inRange(hsv_roi, Scalar(140., 0., 0.), Scalar(255., 255., 100.), maskroi); // Créer un masque contenant 255 lorsque la valeur est dans l'interval
+		inRange(hsv_roi, Scalar(140., 0., 0.), Scalar(255., 255., 150.), maskroi); // Créer un masque contenant 255 lorsque la valeur est dans l'interval
 		//imwrite("mask_roi.jpg", maskroi);
 
+		//savePic(&maskroi, 3);
 		calcHist(&roi, 1, channels, maskroi, m_roi_hist, 2, histSize, ranges, true, false);
 	}
 	else 
@@ -54,23 +56,70 @@ void Tracking::calculHistogram(Mat &roi, const int channels[], const int histSiz
 	normalize(m_roi_hist, m_roi_hist, 0, 255, NORM_MINMAX);
 }
 
-void Tracking::initializeHistogram(int x, int y, int width, int height, const int channels[], const int histSize[], float range[], const float *ranges[])
+Point2f Tracking::searchTarget()
 {
-	Mat frame;
-	Mat hsv, dst;
-	int k = 0;
-	m_track_window = Rect(x, y, width, height);
+	Point2f oiseau = Point2f(m_current_frame.cols-1, m_current_frame.rows-1);
+	int cpt=0;
+	cout << oiseau.x;
+	while (oiseau.x > m_current_frame.cols / 2)
+	{
+		m_current_frame = Mat();
+		// Capture frame-by-frame
+		m_cap >> m_current_frame;
+		// If the frame is empty, break immediately
+		if (m_current_frame.empty() || cpt > 10)
+			return Point2f(-1,-1);
 
-	/**********************************************************/
-	/*******************Calcul de l'Histogramme****************/
-	/**********************************************************/
-	m_cap >> frame;
-	Mat roi = frame(m_track_window);
+		cout << "a" << endl;
+		m_geo.setPictures(m_current_frame);
 
-	// Calcul roi histogram
-	calculHistogram(roi, channels, histSize, range, ranges, true);
-	/**********************************************************/
+		cout << "b" << endl;
+		m_geo.DO();
+		oiseau = m_geo.getOiseau();
 
+		cout << "c" << endl;
+		imshow("img2", m_current_frame);
+		cpt++;
+		cout << oiseau.x;
+	}
+	return oiseau;
+}
+
+void Tracking::initializeHistogram(int width, int height, const int channels[], const int histSize[], float range[], const float *ranges[])
+{
+	Point2f target = searchTarget();
+	if (target.x != -1)
+	{
+		Mat hsv, dst;
+		int k = 0;
+		m_track_window = Rect(target.x- width /2, target.y - height /2, width, height) & Rect(0,0,m_current_frame.cols, m_current_frame.rows);
+
+		/**********************************************************/
+		/*******************Calcul de l'Histogramme****************/
+		/**********************************************************/
+		Mat pic = m_geo.getPicture();
+		Mat roi = pic(m_track_window);
+		//savePic(&roi, 1);
+
+		// Calcul roi histogram
+		calculHistogram(roi, channels, histSize, range, ranges, true);
+		/**********************************************************/
+
+		lastCenter = Point(m_track_window.x, m_track_window.y);
+
+		/*
+		* initialize the kalman filter
+		*/
+		double interval = 1.0 / m_cap.get(CV_CAP_PROP_FPS);
+		initKalman(interval);
+
+		isLost = false;
+	}
+	else
+	{
+		m_track_window = Rect(m_current_frame.cols / 2, m_current_frame.rows / 2, width, height) & Rect(0, 0, m_current_frame.cols, m_current_frame.rows);
+		isLost = true;
+	}
 }
 
 void Tracking::traceRoute(Mat& frame, bool foundTarget)
@@ -138,85 +187,154 @@ void Tracking::traceRoute(Mat& frame, bool foundTarget)
 	}
 }
 
+void Tracking::initKalman(double interval)
+{
+	const int stateNum = 4;
+	const int measureNum = 2;
+
+	Mat statePost = (Mat_<float>(stateNum, 1) << m_track_window.x + m_track_window.width / 2.0,
+		m_track_window.y + m_track_window.height / 2.0,
+		0, 0);
+	Mat transitionMatrix = (Mat_<float>(stateNum, stateNum) << 1, 0, 1, 0,
+		0, 1, 0, 1,
+		0, 0, 1, 0,
+		0, 0, 0, 1);
+
+	KF.init(stateNum, measureNum);
+
+	KF.transitionMatrix = transitionMatrix;
+	KF.statePost = statePost;
+	setIdentity(KF.measurementMatrix);
+	setIdentity(KF.processNoiseCov, Scalar::all(1e-1));
+	setIdentity(KF.measurementNoiseCov, Scalar::all(1e-3));
+	setIdentity(KF.errorCovPost, Scalar::all(0.1));
+
+	measurement = Mat::zeros(measureNum, 1, CV_32F);
+}
+
+Point Tracking::getCurrentState() const
+{
+	Mat statePost = KF.statePost;
+	return Point(statePost.at<float>(0), statePost.at<float>(1));
+}
+
+void Tracking::setCurrentTrackWindow()
+{
+	int cols = m_current_frame.cols;
+	int rows = m_current_frame.rows;
+
+	m_track_window.x = KFCorrectCenter.x - m_track_window.width / 2;
+	m_track_window.y = KFCorrectCenter.y - m_track_window.height / 2;
+
+	//    trackWindow.x = MAX(0, trackWindow.x);
+	//    trackWindow.x = MIN(cols, trackWindow.width);
+	//    trackWindow.y = MAX(0, trackWindow.y);
+	//    trackWindow.y = MIN(rows, trackWindow.height);
+	//cout << m_track_window << endl;
+
+	m_track_window &= Rect(0, 0, cols, rows);
+
+	if (m_track_window.width <= 0 || m_track_window.height <= 0) {
+		int width = MIN(KFCorrectCenter.x, cols - KFCorrectCenter.x) * 2;
+		int height = MIN(KFCorrectCenter.y, rows - KFCorrectCenter.y) * 2;
+
+		m_track_window = Rect(KFCorrectCenter.x - width / 2, KFCorrectCenter.y - height / 2, width, height);
+	}
+}
+
 Point Tracking::camShiftTracking(const int channels[], const int histSize[], float range[], const float *ranges[])
 {
-	Mat frame;
 	Mat hsv, dst;
 
-	m_cap >> frame;
-
-	Point center_of_rect;
-
-	if (!frame.empty())
+	m_current_frame = Mat();
+	m_cap >> m_current_frame;
+	// Ajout m_geo
+	m_geo.setPictures(m_current_frame);
+	
+	if (!m_current_frame.empty())
 	{
-
-		cvtColor(frame, hsv, COLOR_BGR2HSV);
-		calcBackProject(&frame, 1, channels, m_roi_hist, dst, ranges);
+		
+		cvtColor(m_current_frame, hsv, COLOR_BGR2HSV);
+		calcBackProject(&m_current_frame, 1, channels, m_roi_hist, dst, ranges);
 
 		RotatedRect rot = CamShift(dst, m_track_window, TermCriteria(TermCriteria::EPS | TermCriteria::COUNT, 100, 0.01));
+
+		m_center_of_rect = Point(m_track_window.x + m_track_window.width / 2, m_track_window.y + m_track_window.height / 2);
+
+		/*
+		* do kalman prediction
+		*/
+		KF.predict();
+		KFPredictCenter = getCurrentState();
+
+		/*
+		* set measurement
+		*/
+		measurement.at<float>(0) = m_center_of_rect.x;
+		measurement.at<float>(1) = m_center_of_rect.y;
+
+		/*
+		* do kalman correction
+		*/
+		KF.correct(measurement);
+		KFCorrectCenter = getCurrentState();
 		
-		if (m_track_window.area() <= 1)
+		lastCenter = KFCorrectCenter;
+
+		setCurrentTrackWindow();
+
+		if (!isLost)
 		{
-			int cols = dst.cols, rows = dst.rows, r = (MIN(cols, rows) + 5) / 6;
-			m_track_window = Rect(m_track_window.x - r, m_track_window.y - r,
-				m_track_window.x + r, m_track_window.y + r) &
-				Rect(0, 0, cols, rows);
+			rectangle(m_current_frame, m_track_window, Scalar(255, 128, 128), 2);
+			circle(m_current_frame, m_center_of_rect, 1, Scalar(0, 0, 255), 2);
 		}
-
-		rectangle(frame, m_track_window, Scalar(255, 128, 128), 2);
-
-		center_of_rect = Point(m_track_window.x + m_track_window.width / 2, m_track_window.y + m_track_window.height / 2);
 
 		// Affichage d'une ellipse représentant le rectangle rot renvoyé par le CamShift
-		ellipse(frame, rot, Scalar(0, 0, 255), 2, LINE_AA);
+		//if (rot.size.width > 0 && rot.size.height > 0) ellipse(m_current_frame, rot, Scalar(0, 0, 255), 2, LINE_AA);
 
-		traceRoute(frame, rot.size.width > 0 && rot.size.height > 0);
+		traceRoute(m_current_frame, rot.size.width > 0 && rot.size.height > 0);
 
-		imshow("img2", frame);
-
-		//savePic(&frame, save_index);
-		//save_index++;
-
-		/*// On récupère le point du centroid
-		Mat roi = frame(m_track_window);
-		vector<Point2f> centroid;
-
-		Mat * res;
-
-		//geo->setPictures(roi);
-		//geo->DO();
-		res = geo->getResult();
-		if (!res->empty()) {
-			centroid = geo->getCoords();
-			//cout << centroid[0];
+		if (rot.size.width == 0 && rot.size.height == 0)
+		{
+			isLost = true;
+			cpt_reinit_histo++;
+			if (cpt_reinit_histo >= 20)
+			{
+				initializeHistogram(40, 40, channels, histSize, range, ranges);
+				cpt_reinit_histo = 0;
+			}
+		}
+		else {
+			cpt_reinit_histo = 0;
+			isLost = false;
 		}
 
-		if(centroid.size() != 0)
-			circle(frame, centroid[0], 10, Scalar(255, 0, 255), 2);*/
+		imshow("img2", m_current_frame);
+
 	}
 
-	return center_of_rect;
+	return m_center_of_rect;
 }
 
 Point Tracking::meanShiftTracking(const int channels[], const int histSize[], float range[], const float *ranges[])
 {
-	Mat frame;
 	Mat hsv, dst;
 
-	m_cap >> frame;
+	m_current_frame = Mat();
+	m_cap >> m_current_frame;
+	// Ajout m_geo
+	m_geo.setPictures(m_current_frame);
 
-	Point center_of_rect;
-
-	if (!frame.empty())
+	if (!m_current_frame.empty())
 	{
 
-		cvtColor(frame, hsv, COLOR_BGR2HSV);
+		cvtColor(m_current_frame, hsv, COLOR_BGR2HSV);
 		
 		/*The functions calcBackProject calculate the back project of the histogram.
 		That is, similarly to calcHist , at each location (x, y) the function collects the values from the selected channels in the input images and finds the corresponding histogram bin.
 		But instead of incrementing it, the function reads the bin value, scales it by scale , and stores in backProject(x,y) .
 		In terms of statistics, the function computes probability of each element value in respect with the empirical probability distribution represented by the histogram. */
-		calcBackProject(&frame, 1, channels, m_roi_hist, dst, ranges);
+		calcBackProject(&m_current_frame, 1, channels, m_roi_hist, dst, ranges);
 
 		/***********************************************************/
 		/************************Meanshift*************************/
@@ -224,17 +342,57 @@ Point Tracking::meanShiftTracking(const int channels[], const int histSize[], fl
 
 		int val = meanShift(dst, m_track_window, TermCriteria(TermCriteria::EPS | TermCriteria::COUNT, 100, 0.01));
 		
-		//void rectangle(Mat& img, Rect rec, const Scalar& color, int thickness=1, int lineType=8, int shift=0 )
-		rectangle(frame, m_track_window, Scalar(255, 128, 128), 2);
 
+		m_center_of_rect = Point(m_track_window.x + m_track_window.width / 2, m_track_window.y + m_track_window.height / 2);
+
+		/*
+		* do kalman prediction
+		*/
+		KF.predict();
+		KFPredictCenter = getCurrentState();
+
+		/*
+		* set measurement
+		*/
+		measurement.at<float>(0) = m_center_of_rect.x;
+		measurement.at<float>(1) = m_center_of_rect.y;
+
+		/*
+		* do kalman correction
+		*/
+		KF.correct(measurement);
+		KFCorrectCenter = getCurrentState();
+
+		lastCenter = KFCorrectCenter;
+
+		setCurrentTrackWindow();
+
+		if (!isLost)
+		{
+			rectangle(m_current_frame, m_track_window, Scalar(255, 128, 128), 2);
+			circle(m_current_frame, m_center_of_rect, 1, Scalar(0, 0, 255), 2);
+		}
+		
 		/********************************************************/
 
-		traceRoute(frame, val != 0);
+		traceRoute(m_current_frame, val != 0);
 
-		center_of_rect = (m_track_window.br() + m_track_window.tl())*0.5;
-		circle(frame, center_of_rect, 1, Scalar(0, 0, 255), 2);
+		if (val == 0)
+		{
+			isLost = true;
+			cpt_reinit_histo++;
+			if (cpt_reinit_histo >= 20)
+			{
+				initializeHistogram(60, 60, channels, histSize, range, ranges);
+				cpt_reinit_histo = 0;
+			}
+		}
+		else {
+			cpt_reinit_histo = 0;
+			isLost = false;
+		}
 
-		imshow("img2", frame);
+		imshow("img2", m_current_frame);
 
 		//savePic(&frame, save_index);
 		//save_index++;
@@ -242,39 +400,6 @@ Point Tracking::meanShiftTracking(const int channels[], const int histSize[], fl
 		// Affichage Back Projection
 		//imshow("dst", dst);
 	}
-	return center_of_rect;
+	return m_center_of_rect;
 }
 
-void Tracking::blobDetection(string videoName)
-{
-	// Create a VideoCapture object and open the input file
-	// If the input is the web camera, pass 0 instead of the video file name
-	VideoCapture cap(videoName);
-	Mat im;
-	// Set up the detector with default parameters.
-	SimpleBlobDetector detector;
-	std::vector<KeyPoint> keypoints;
-	Mat im_with_keypoints;
-
-	//while (true)
-	//{
-		cap >> im;
-		//if (!im.empty())
-		//{
-			// Detect blobs.
-			detector.detect(im, keypoints);
-
-			// Draw detected blobs as red circles.
-			// DrawMatchesFlags::DRAW_RICH_KEYPOINTS flag ensures the size of the circle corresponds to the size of blob
-			drawKeypoints(im, keypoints, im_with_keypoints, Scalar(0, 0, 255), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-
-			// Show blobs
-			imshow("keypoints", im_with_keypoints);
-		//}
-	//}
-
-	destroyAllWindows();
-	cap.release();
-
-	//waitKey(0);
-}
