@@ -21,43 +21,60 @@ using namespace xfeatures2d;
 class Tracking
 {
 private:
+	// Tracking
 	VideoCapture m_cap;
-	Mat m_current_frame;
-	Mat m_roi_hist;
 	Rect m_track_window;
+	Mat m_current_frame;
 
+	// Histogramme
+	Mat m_roi_hist;
+
+	// Classe de détection de l'oiseau dans l'image
 	GeoCentre m_geo;
 
+	// Tracé de la position
 	std::deque<Point> m_li_center;
 	std::deque<Point> m_li_center_afterlost;
 
+	// Compteur jusqu'à refaire un nouvel histogramme
 	int cpt_reinit_histo;
 
-	KalmanFilter KF;
-	Mat_<float> measurement;
-	Point KFPredictCenter;
-	Point KFCorrectCenter;
+	// Filtre de Kalman
+	KalmanFilter m_KF;
+	Mat_<float> m_measurement;
+	Point m_KFPredictCenter;
+	Point m_KFCorrectCenter;
 	Point m_center_of_rect;
-	Point lastCenter;
 
-	bool isLost;
+	bool m_isLost;
+	
+	// Méthode d'initialisation de l'histogramme
+	void calculHistogram(Mat &roi, const int channels[], const int histSize[], float range[], const float *ranges[], bool usemask = false);
+
+	// Tracé de la position
+	void traceRoute(Mat& frame, bool foundTarget);
+
+	// Filtre de Kalman
+	void initKalman();
+	Point getCurrentKalmanState() const;
+	void setCurrentKalmanTrackWindow();
 
 public:
 	Tracking(string videoName);
 	~Tracking();
 
+	// Méthode de sauvegarde d'image
 	void savePic(Mat * im, int i); 
 
-	Point2f searchTarget();
+	// Méthode d'initialisation de l'histogramme
 	void initializeHistogram(int width, int height, const int channels[], const int histSize[], float range[], const float *ranges[]);
-	void calculHistogram(Mat &roi, const int channels[], const int histSize[], float range[], const float *ranges[], bool usemask = false);
+
+	// Méthode permettant de trouvé l'oiseau dans l'image
+	Point2f searchTarget();
+
+	// Méthode tracking
 	Point camShiftTracking(const int channels[], const int histSize[], float range[], const float *ranges[]);
 	Point meanShiftTracking(const int channels[], const int histSize[], float range[], const float *ranges[]);
-	void traceRoute(Mat& frame, bool foundTarget);
 
-
-	void initKalman(double interval);
-	Point getCurrentState() const;
-	void setCurrentTrackWindow();
 };
 
